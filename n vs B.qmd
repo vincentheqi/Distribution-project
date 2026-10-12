@@ -53,3 +53,13 @@ kurt(exp_100)
 qq_cor(exp_100)   
 ```
 
+```{r}
+source("R/clt_functions.R")
+check_normal(exp_100)
+```
+
+```{r}
+set.seed(5405)
+check_normal(simulate_means(function(n) rexp(n, rate = 1), n = 10))
+```
+
