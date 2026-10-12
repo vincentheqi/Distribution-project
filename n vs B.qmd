@@ -62,4 +62,18 @@ check_normal(exp_100)
 set.seed(5405)
 check_normal(simulate_means(function(n) rexp(n, rate = 1), n = 10))
 ```
+```{r}
+source("R/clt_functions.R")
+
+set.seed(5405)
+sweep_n(function(n) rexp(n, rate = 1),
+        n_values = c(10, 20, 30, 50, 75, 100, 150))
+```
+
+```{r}
+set.seed(5405)
+sweep_n(function(n) rexp(n, rate = 1),
+        n_values = seq(80, 140, by = 10),
+        B = 50000)
+```
 

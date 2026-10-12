@@ -35,3 +35,12 @@ check_normal <- function(x, skew_max = 0.2, kurt_max = 0.5, qq_min = 0.998) {
     passes          = abs(s) < skew_max & abs(k) < kurt_max & q > qq_min
   )
 }
+
+# Run check_normal() for several sample sizes; one row per n
+sweep_n <- function(generator, n_values, B = 10000) {
+  rows <- lapply(n_values, function(n) {
+    means <- simulate_means(generator, n, B)
+    cbind(n = n, check_normal(means))
+  })
+  do.call(rbind, rows)
+}
