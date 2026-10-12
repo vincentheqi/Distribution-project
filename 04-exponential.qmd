@@ -1,0 +1,81 @@
+---
+title: "Population 4: Exponential"
+format:
+  html:
+    embed-resources: true
+    toc: true
+---
+
+```{r}
+#| label: setup
+source("R/clt_functions.R")
+student_id <- 5405
+```
+
+## 1. What population am I sampling from?
+
+The population is the exponential distribution with rate λ = 1, often used to model waiting times, such as the time until the next customer arrives. Its mean and standard deviation are both 1. As the histogram below shows, it is strongly right-skewed: most values are small, but a long tail stretches far to the right, with occasional values above 6 or 8. Its skewness is 2 and its excess kurtosis is 6, meaning both a lopsided shape and heavy tails compared with a normal distribution. This is the first population in my study where skewness, not tail weight or discreteness, is the main obstacle to normality.
+
+```{r}
+#| label: population
+set.seed(student_id)
+pop <- rexp(10000, rate = 1)
+hist(pop, breaks = 40, main = "Population: Exponential(rate = 1)",
+     xlab = "Individual value")
+```
+
+## 2. What did I expect?
+
+For sample means from an exponential population, skewness equals 2/√n and excess kurtosis equals 6/n. My kurtosis limit (0.5) is reached at about n = 12, but my skewness limit (0.2) is not reached until n = 100. So I expected skewness to be the deciding check and the answer to be around n = 100, much larger than the n = 30 rule of thumb. From my earlier exploration, I also knew n = 100 sits exactly on the boundary, so I expected the result near that point to be sensitive to random noise.
+
+## 3. Which sample sizes did I investigate?
+
+```{r}
+#| label: sweep
+set.seed(student_id)
+results <- sweep_n(function(n) rexp(n, rate = 1),
+                   n_values = c(2, 5, 10, 20, 30, 50, 75, 100, 150))
+results
+```
+
+```{r}
+#| label: sweep-confirm
+set.seed(student_id)
+confirm <- sweep_n(function(n) rexp(n, rate = 1),
+                   n_values = seq(80, 140, by = 10), B = 50000)
+confirm
+```
+
+I first ran a wide sweep from n = 2 to 150 with B = 10,000. It showed n = 100 failing narrowly (skewness 0.207) and n = 150 passing. Because the true skewness at n = 100 is exactly 0.2, right on my threshold, I zoomed in on n = 80 to 140 in steps of 10 with B = 50,000 to reduce Monte Carlo noise. The verdict changed from FALSE to TRUE between n = 100 and n = 110 and stayed TRUE for every larger value. These results exactly matched my earlier exploration with the same seed, confirming that the analysis is reproducible.
+
+## 4. When did it become approximately normal?
+
+$$\boxed{n = 110}$$
+Under my rule, the sampling distribution of the mean becomes approximately normal at n = 110, and every larger sample size I tested also passed.
+
+## 5. Why did I choose that value?
+
+```{r}
+#| label: plots-compare
+#| fig-height: 7
+set.seed(student_id)
+means_n30  <- simulate_means(function(n) rexp(n, rate = 1), n = 30)
+means_n110 <- simulate_means(function(n) rexp(n, rate = 1), n = 110)
+
+par(mfrow = c(2, 2))
+plot_means(means_n30,  mu = 1, sigma = 1, n = 30)
+plot_means(means_n110, mu = 1, sigma = 1, n = 110)
+par(mfrow = c(1, 1))
+```
+
+My rule requires |skewness| < 0.2, |excess kurtosis| < 0.5, and a Q-Q correlation above 0.998.
+
+Kurtosis was the easiest check, passing from n = 20 onward. The Q-Q correlation reached 0.998 around n = 50 to 75. Skewness was the last to pass: it was 0.209 at n = 100 (fail) and 0.175 at n = 110 (pass) with B = 50,000, which matches the theoretical values of 0.200 and 0.191 within Monte Carlo noise.
+
+The plots show why n = 30 is not enough. At n = 30, skewness was still 0.310. The histogram’s right tail extends beyond the normal curve, and the Q-Q plot bends upward at its right end, which is the typical sign of a right tail that is too long. At n = 110, the histogram is nearly symmetric and the Q-Q plot is close to a straight line, with only a slight upturn at the very top. Since n = 110 is the smallest tested sample size where all three checks pass, and every larger value also passes, I chose n = 110.
+
+## 6. What surprised me?
+
+The biggest surprise was how far the answer is from the n = 30 rule of thumb. Under my rule, the exponential needs almost four times as many observations. At n = 30, the distribution looked fairly bell-shaped at first glance, but the numbers and the Q-Q plot showed it was still noticeably skewed.
+
+I was also surprised by how sensitive the result was near the boundary. In an earlier run, n = 100 passed with skewness 0.185, and in another it failed with 0.214. It was the same population and the same n, but different random numbers. This taught me that when the true value sits right on a threshold, a single simulation can’t decide the answer, and I needed a larger B to get a stable result. Finally, kurtosis did not shrink smoothly: it was higher at n = 10 (0.907) than at n = 5 (0.867), showing that kurtosis estimates are noisier than skewness estimates for a skewed population.
