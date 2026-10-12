@@ -44,3 +44,12 @@ sweep_n <- function(generator, n_values, B = 10000) {
   })
   do.call(rbind, rows)
 }
+
+# Histogram with the CLT normal curve, plus a Q-Q plot, for one n
+plot_means <- function(means, mu, sigma, n) {
+  hist(means, breaks = 40, probability = TRUE,
+       main = paste("Sample means, n =", n), xlab = "Sample mean")
+  curve(dnorm(x, mu, sigma / sqrt(n)), add = TRUE, col = "firebrick", lwd = 2)
+  qqnorm(means, main = paste("Q-Q plot, n =", n))
+  qqline(means, col = "firebrick", lwd = 2)
+}

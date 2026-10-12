@@ -1,0 +1,84 @@
+---
+title: "Population 2: Continuous Uniform"
+format:
+  html:
+    embed-resources: true
+    toc: true
+---
+
+```{r}
+#| label: setup
+source("R/clt_functions.R")
+student_id <- 5405
+```
+
+## 1. What population am I sampling from?
+
+The population is the continuous uniform distribution on [0, 1]. Every value between 0 and 1 is equally likely, so the histogram below is flat, with hard edges at 0 and 1. Its mean is μ = 0.5 and its standard deviation is σ = √(1/12) ≈ 0.289.
+
+The uniform is symmetric, so its skewness is 0, the same as a normal distribution. But it is clearly not normal. Its excess kurtosis is −1.2, meaning its tails are much lighter than a normal distribution’s. In fact, it has no tails at all, because values can never fall below 0 or above 1. This makes it a useful test: skewness can’t tell it apart from a normal distribution, so kurtosis and the Q-Q plot have to do the work.
+
+```{r}
+#| label: population
+set.seed(student_id)
+pop <- runif(10000)
+hist(pop, breaks = 40, main = "Population: Uniform(0, 1)",
+     xlab = "Individual value")
+```
+
+## 2. What did I expect?
+
+Since the uniform is symmetric, I expected skewness to be close to 0 at every sample size. That means kurtosis would decide when the sampling distribution becomes approximately normal. For sample means, the excess kurtosis shrinks like −1.2/n. My rule requires |excess kurtosis| < 0.5, and −1.2/n first reaches that between n = 2 (−0.6) and n = 3 (−0.4). So I expected convergence to be fast, around n = 3, much faster than the exponential population, which is strongly skewed.
+
+## 3. Which sample sizes did I investigate?
+
+```{r}
+#| label: sweep
+set.seed(student_id)
+results <- sweep_n(function(n) runif(n), n_values = c(1, 2, 3, 4, 5, 10, 30))
+results
+```
+
+I started with n = 1, 2, 5, 10, and 30 using B = 10,000 repetitions. The results showed n = 2 failing and n = 5 passing, so I added n = 3 and n = 4 to find the exact cutoff.
+
+Because n = 3’s Q-Q correlation (0.9988) was close to my 0.998 cutoff, I reran n = 2 to 4 with B = 50,000 to make sure the result wasn’t due to random noise. The verdicts did not change, and the kurtosis estimates moved closer to the theoretical values: −0.589, −0.403, and −0.302, compared with −0.6, −0.4, and −0.3. This confirmed that n = 3 is a stable result rather than a lucky draw.
+
+```{r}
+#| label: sweep-confirm
+set.seed(student_id)
+confirm <- sweep_n(function(n) runif(n), n_values = 2:4, B = 50000)
+confirm
+```
+
+
+## 4. When did it become approximately normal?
+
+ $$\boxed{n = 3}$$
+The sampling distribution of the mean becomes approximately normal at n = 3, and every larger sample size I tested also passed.
+
+## 5. Why did I choose that value?
+
+```{r}
+#| label: plots-compare
+#| fig-height: 7
+set.seed(student_id)
+means_n2 <- simulate_means(function(n) runif(n), n = 2)
+means_n3 <- simulate_means(function(n) runif(n), n = 3)
+
+par(mfrow = c(2, 2))
+plot_means(means_n2, mu = 0.5, sigma = sqrt(1/12), n = 2)
+plot_means(means_n3, mu = 0.5, sigma = sqrt(1/12), n = 3)
+par(mfrow = c(1, 1))
+```
+
+My rule calls a distribution approximately normal when |skewness| < 0.2, |excess kurtosis| < 0.5, and the Q-Q correlation is above 0.998, with no clear problems in the histogram or Q-Q plot.
+
+Skewness was close to 0 at every n (never larger than 0.023 in absolute value), as expected for a symmetric population, so kurtosis was the deciding check. At n = 2, excess kurtosis was −0.626 (−0.589 with B = 50,000), which fails. At n = 3, it was −0.378 (−0.403 with B = 50,000), which passes with room to spare compared with the Monte Carlo noise of about ±0.05. The Q-Q correlation also crossed my cutoff at n = 3 (0.9988, confirmed at 0.9987).
+
+The plots agree. At n = 2, the histogram is shaped like a triangle: it peaks at 0.5 and has straight sides, so it is too pointed compared with the normal curve. Its Q-Q plot still shows an S-shape, with the ends flattening because the means can’t go below 0 or above 1. At n = 3, the histogram follows the normal curve closely, and the Q-Q plot is nearly straight, with only a slight bend at the extreme ends. Since n = 3 is the smallest sample size that passes all checks, and every larger n also passes, I chose n = 3.
+
+## 6. What surprised me?
+
+Two things surprised me. First, the sampling distribution at n = 2 was a triangle. I didn’t expect averaging just two flat distributions to create such a clear peak in the middle. It shows the CLT working even at n = 2: values near 0.5 can come from many combinations, while extreme values need both draws to be extreme.
+
+Second, at n = 1 the skewness was nearly perfect (−0.005), yet the distribution failed badly. If I had only checked skewness, I would have called a flat rectangle “normal.” This showed me why my rule needs more than one measure.

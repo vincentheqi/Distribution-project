@@ -41,7 +41,7 @@ I tested n = 1, 2, 5, 10, and 30, each with B = 10,000 Monte Carlo repetitions. 
 
 ## 4. When did it become approximately normal?
 
-n = 1
+   $$\boxed{n = 1}$$
 The sampling distribution of the mean is approximately normal at every sample size tested, starting at n = 1.
 
 ## 5. Why did I choose that value?
