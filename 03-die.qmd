@@ -1,0 +1,87 @@
+---
+title: "Population 3: Six-Sided Die"
+format:
+  html:
+    embed-resources: true
+    toc: true
+---
+
+```{r}
+#| label: setup
+source("R/clt_functions.R")
+student_id <- 5405
+```
+
+## 1. What population am I sampling from?
+
+The population is a fair six-sided die. Each roll is a whole number from 1 to 6, and every face is equally likely, as the bar chart below shows. Its mean is μ = 3.5 and its standard deviation is σ = √(35/12) ≈ 1.708. Like the continuous uniform, it is flat and symmetric, so its skewness is 0. Its excess kurtosis is about −1.27, meaning very light tails with hard limits at 1 and 6.
+
+The important difference from the continuous uniform is that the die is discrete: it can only take six values. Sample means are discrete too. With n = 2, the mean can only be 1, 1.5, 2, …, 6. This population tests whether discreteness slows down convergence to normality, even when the overall shape is similar to a population that converges quickly.
+
+```{r}
+#| label: population
+set.seed(student_id)
+pop <- sample(1:6, 10000, replace = TRUE)            
+barplot(table(pop), main = "Population: Six-Sided Die",  
+        xlab = "Roll", ylab = "Count")
+```
+
+## 2. What did I expect?
+
+Because the die has nearly the same shape as the continuous uniform, I expected skewness to stay near 0 and kurtosis to decide the answer. Kurtosis shrinks like −1.27/n, which first falls inside my ±0.5 limit at n = 3 (−0.42). So based on shape alone, I expected about n = 3, the same as the uniform. However, I suspected the gaps between possible values might cause problems in the Q-Q plot that kurtosis would not detect, which could push the answer higher.
+
+## 3. Which sample sizes did I investigate?
+
+```{r}
+#| label: sweep
+set.seed(student_id)
+results <- sweep_n(function(n) sample(1:6, n, replace = TRUE),   
+                   n_values = c(1, 2, 3, 4, 5, 10, 30))
+results
+```
+
+```{r}
+#| label: sweep-confirm
+set.seed(student_id)
+confirm <- sweep_n(function(n) sample(1:6, n, replace = TRUE),
+                   n_values = 5:10, B = 50000)
+confirm
+```
+
+I first tested n = 1, 2, 3, 4, 5, 10, and 30 with B = 10,000. Kurtosis passed at n = 3, as expected, but the Q-Q correlation did not pass until n = 10. To find the exact cutoff, I tested every value from n = 5 to 10 with B = 50,000. With the larger B, the Q-Q correlation increased smoothly (0.9967, 0.9973, 0.9978, 0.9980, 0.9982, 0.9984) with no flip-flopping, so the cutoff is a stable result.
+
+## 4. When did it become approximately normal?
+
+ $$\boxed{n = 9}$$
+Under my full rule, the sampling distribution of the mean becomes approximately normal at n = 9, and n = 10 and 30 also pass.
+
+## 5. Why did I choose that value?
+
+```{r}
+#| label: plots-compare
+#| fig-height: 7
+set.seed(student_id)
+means_n3 <- simulate_means(function(n) sample(1:6, n, replace = TRUE), n = 3)
+means_n9 <- simulate_means(function(n) sample(1:6, n, replace = TRUE), n = 9)
+
+par(mfrow = c(2, 2))
+plot_means(means_n3, mu = 3.5, sigma = sqrt(35/12), n = 3,
+           breaks = seq(1 - 0.5/3, 6 + 0.5/3, by = 1/3))
+plot_means(means_n9, mu = 3.5, sigma = sqrt(35/12), n = 9,
+           breaks = seq(1 - 0.5/9, 6 + 0.5/9, by = 1/9))
+par(mfrow = c(1, 1))
+```
+
+My rule requires |skewness| < 0.2, |excess kurtosis| < 0.5, and a Q-Q correlation above 0.998.
+
+For the die, these checks disagreed. Skewness stayed near 0 at every n, and kurtosis passed from n = 3 onward (−0.424 at n = 3, matching the theoretical −0.423). But the Q-Q correlation stayed below 0.998 until n = 9 (0.9980 at n = 8, 0.9982 at n = 9). Since my rule requires all three checks to pass, n = 9 is my answer.
+
+The plots explain the disagreement. At n = 3, the histogram already follows the normal curve closely, so the overall shape is nearly normal. But the Q-Q plot is a staircase: thousands of sample means pile up on each of the few possible values, creating flat steps that can’t lie on a straight line. Kurtosis only measures tail weight, so it can’t detect this. At n = 9, the possible values are spaced only 1/9 apart, the steps become very small, and the Q-Q plot hugs the line.
+
+Someone could argue that the die is “normal enough” at n = 3, since only the discreteness is failing. I chose to apply my rule consistently across all populations instead of changing it for one case. My conclusion is that the die reaches a near-normal shape by n = 3, but needs n = 9 before its discreteness is fine enough to pass my full standard.
+
+## 6. What surprised me?
+
+The biggest surprise was that the die took three times longer than the continuous uniform (n = 9 vs. n = 3), even though the two populations have almost the same shape. I had assumed shape was the only thing that mattered, but discreteness turned out to be a separate obstacle.
+
+I was also surprised by my first histogram. With breaks = 40, it showed tall, narrow spikes far above the normal curve, which made the distribution look very non-normal. The real problem was the bins: they were much narrower than the gaps between possible values. After I centered one bin on each possible mean, the histogram matched the curve closely. This taught me that a bad choice of bins can make a graph misleading.
