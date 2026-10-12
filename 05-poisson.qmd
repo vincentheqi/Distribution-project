@@ -1,0 +1,99 @@
+---
+title: "Population 5: Poisson"
+format:
+  html:
+    embed-resources: true
+    toc: true
+---
+
+```{r}
+#| label: setup
+source("R/clt_functions.R")
+student_id <- 5405
+```
+
+## 1. What population am I sampling from?
+
+The population is a Poisson distribution with λ = 1, which models counts of random events, such as the number of customers arriving in a minute when the average is one. It can only take whole-number values (0, 1, 2, …). As the bar chart below shows, 0 and 1 are the most common values, larger counts become rare, and there is a long right tail. Its mean and standard deviation are both 1. Its skewness is 1 and its excess kurtosis is 1.
+
+This population combines two obstacles I saw separately before: it is discrete, like the die, and right-skewed, like the exponential. I wanted to see which obstacle would take longer to disappear.
+
+```{r}
+#| label: population
+set.seed(student_id)
+pop <- rpois(10000, lambda = 1)
+barplot(table(pop), main = "Population: Poisson(lambda = 1)",
+        xlab = "Count", ylab = "Frequency")
+```
+
+## 2. What did I expect?
+
+For sample means from Poisson(1), skewness equals 1/√n and excess kurtosis equals 1/n. Kurtosis falls below 0.5 at n = 2, so I didn’t expect it to matter. Skewness reaches my 0.2 limit at n = 25. Because Poisson is also discrete, I expected the Q-Q staircase to slow things down, as it did for the die. I predicted an answer somewhere between 25 and 50, smaller than the exponential (n = 110) because Poisson(1) is only half as skewed.
+
+## 3. Which sample sizes did I investigate?
+
+```{r}
+#| label: sweep
+set.seed(student_id)
+results <- sweep_n(function(n) rpois(n, lambda = 1),
+                   n_values = c(1, 2, 5, 10, 20, 25, 30, 40, 50, 75, 100))
+results
+```
+
+```{r}
+#| label: sweep-confirm
+set.seed(student_id)
+confirm <- sweep_n(function(n) rpois(n, lambda = 1),
+                   n_values = seq(25, 50, by = 5), B = 50000)
+confirm
+```
+```{r}
+#| label: sweep-confirm-exact
+set.seed(student_id)
+confirm2 <- sweep_n(function(n) rpois(n, lambda = 1),
+                   n_values = 31 : 35, B = 50000)
+confirm2
+```
+
+I first ran a wide sweep from n = 1 to 100 with B = 10,000. The results were inconsistent near the cutoff: skewness passed at n = 30 (0.150) but failed at n = 40 (0.228), even though theory says skewness should keep decreasing. I realized that for skewed, discrete data, the skewness estimate is noisier than my earlier ±0.025 estimate, which assumed roughly normal data.
+
+To get a stable answer, I reran n = 25 to 50 in steps of 5 with B = 50,000. This time the results were consistent: n = 40’s skewness was 0.158, exactly the theoretical value, and the verdict changed from FALSE to TRUE between n = 30 and 35. Finally, I tested every value from 31 to 35 with B = 50,000 to find the exact cutoff.
+
+## 4. When did it become approximately normal?
+
+$$\boxed{n = 35}$$
+Under my rule, the sampling distribution of the mean becomes approximately normal at n = 35, and every larger sample size I tested (40, 45, 50, 75, 100) also passed.
+
+## 5. Why did I choose that value?
+
+```{r}
+#| label: plots-compare
+#| fig-height: 7
+n_a <- 30   
+n_b <- 35   
+
+set.seed(student_id)
+means_a <- simulate_means(function(n) rpois(n, lambda = 1), n = n_a)
+means_b <- simulate_means(function(n) rpois(n, lambda = 1), n = n_b)
+
+par(mfrow = c(2, 2))
+plot_means(means_a, mu = 1, sigma = 1, n = n_a,
+           breaks = seq(-0.5 / n_a, max(means_a) + 0.5 / n_a, by = 1 / n_a))
+plot_means(means_b, mu = 1, sigma = 1, n = n_b,
+           breaks = seq(-0.5 / n_b, max(means_b) + 0.5 / n_b, by = 1 / n_b))
+par(mfrow = c(1, 1))
+```
+
+My rule requires |skewness| < 0.2, |excess kurtosis| < 0.5, and a Q-Q correlation above 0.998.
+
+Kurtosis passed from n = 2 onward. Skewness passed from about n = 30 (0.174 at n = 30 with B = 50,000, compared with a theoretical 0.183). The Q-Q correlation was the last check to pass: it stayed between 0.9977 and 0.9979 for n = 31 to 34 and reached 0.9982 at n = 35. So for Poisson(1), discreteness was the final obstacle, but skewness finished only slightly earlier.
+
+The plots show both obstacles shrinking together. At n = 30 and n = 35, the histograms follow the normal curve closely. The Q-Q plots are nearly straight, with points lifting slightly above the line at the lower-left end (sample means can’t go below 0) and at the upper-right end (the remaining right skew). The fine staircase pattern from the discrete values is still faintly visible.
+
+Honestly, the plots for n = 30 and n = 35 look almost identical. This shows that convergence to normality is gradual. There is no single sample size where the distribution suddenly becomes normal. My rule draws a line, and n = 35 is where this population first crosses it in a stable way.
+
+## 6. What surprised me?
+
+I was surprised that Poisson needed fewer observations than the exponential (n = 35 vs. 110), even though Poisson has two obstacles (skew and discreteness) and the exponential has only one. The reason is that Poisson(1) is much less skewed, so its skewness shrinks below 0.2 four times sooner.
+
+I was also surprised by the inconsistent result at B = 10,000, where skewness at n = 40 (0.228) was larger than at n = 30 (0.150). I had assumed the Monte Carlo noise would always be about ±0.025, but for skewed, discrete data it is larger. This reinforced that when results near a threshold seem contradictory, increasing B is better than trusting a single run.
