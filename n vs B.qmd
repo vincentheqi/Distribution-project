@@ -1,0 +1,15 @@
+---
+title: "n vs B exploration"
+format: html
+---
+```{r}
+set.seed(5405)  
+par(mfrow = c(2, 2))
+
+hist(replicate(200,   mean(rexp(5))),  breaks = 30, main = "n = 5, B = 200")
+hist(replicate(10000, mean(rexp(5))),  breaks = 30, main = "n = 5, B = 10000")
+hist(replicate(200,   mean(rexp(50))), breaks = 30, main = "n = 50, B = 200")
+hist(replicate(10000, mean(rexp(50))), breaks = 30, main = "n = 50, B = 10000")
+
+par(mfrow = c(1, 1))
+```
