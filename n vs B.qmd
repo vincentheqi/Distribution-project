@@ -13,3 +13,43 @@ hist(replicate(10000, mean(rexp(50))), breaks = 30, main = "n = 50, B = 10000")
 
 par(mfrow = c(1, 1))
 ```
+```{r}
+source("R/clt_functions.R")
+
+set.seed(5405)
+test_means <- simulate_means(function(n) rexp(n, rate = 1), n = 30)
+
+length(test_means)
+mean(test_means)
+sd(test_means)
+1 / sqrt(30)
+```
+```{r}
+source("R/clt_functions.R")
+
+skew <- function(x) mean((x - mean(x))^3) / mean((x - mean(x))^2)^(3/2)
+kurt <- function(x) mean((x - mean(x))^4) / mean((x - mean(x))^2)^2 - 3
+
+set.seed(5405)
+unif_1  <- simulate_means(function(n) runif(n), n = 1)
+norm_1  <- simulate_means(function(n) rnorm(n), n = 1)
+
+c(skew_unif = skew(unif_1), kurt_unif = kurt(unif_1))
+c(skew_norm = skew(norm_1), kurt_norm = kurt(norm_1))
+
+par(mfrow = c(1, 2))
+qqnorm(unif_1, main = "Uniform, n = 1"); qqline(unif_1)
+qqnorm(norm_1, main = "Normal, n = 1");  qqline(norm_1)
+par(mfrow = c(1, 1))
+```
+```{r}
+source("R/clt_functions.R")
+
+set.seed(5405)
+exp_100 <- simulate_means(function(n) rexp(n, rate = 1), n = 100)
+
+skew(exp_100)     
+kurt(exp_100)
+qq_cor(exp_100)   
+```
+
