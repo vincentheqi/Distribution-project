@@ -1,0 +1,283 @@
+---
+title: "How Fast Does Normal Happen?"
+subtitle: "Stress-Testing the Central Limit Theorem with Monte Carlo Simulation — Summary of Findings"
+author: "Zhanxiang (Vincent) He"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 2
+    number-sections: true
+    code-fold: true
+    code-summary: "Show code"
+    embed-resources: true
+execute:
+  echo: true
+  warning: false
+  message: false
+---
+
+```{r}
+#| label: setup
+#| include: false
+source("R/clt_functions.R")
+student_id <- 5405
+```
+
+# Key findings {.unnumbered}
+
+::: {.callout-important title="Summary"}
+- **There is no universal sample size.** Under one consistent normality standard, the smallest sample size at which the sample mean was approximately normal ranged from **n = 1** (normal population) to **n = 425** (dependent machine failures), and **no n was sufficient** for the Cauchy distribution.
+- **The n = 30 rule of thumb failed for 6 of the 11 populations** studied.
+- **Skewness was the strongest predictor of slow convergence.** For skewness-limited populations, the required sample size closely followed the approximation n ≈ 25γ², where γ is the population skewness.
+- **Discreteness is a separate obstacle.** Populations with few possible values (relative to their spread) needed larger samples even when their shape was nearly normal.
+- **CLT assumptions differ in importance.** Infinite variance (Cauchy) caused complete failure; non-identical observations had no measurable effect; negative dependence made sample means *more precise* but *slower* to become normal.
+:::
+
+# Research question
+
+The Central Limit Theorem (CLT) states that, under appropriate conditions, the sampling distribution of the sample mean approaches a normal distribution as the sample size grows. In practice, it is often summarized by the rule that **n ≥ 30 is "large enough."**
+
+This project investigates three questions using Monte Carlo simulation in R:
+
+1. **Sample size:** What is the smallest n at which the sampling distribution of the mean can reasonably be called approximately normal, and does this depend on the population?
+2. **Normality:** How should "approximately normal" be defined and measured?
+3. **Assumptions:** What happens when the CLT's assumptions of independence, identical distribution, and finite variance are violated?
+
+# Methods
+
+## Monte Carlo design
+
+For each population and sample size n, I generated **B** independent samples of size n, computed the mean of each, and analyzed the resulting distribution of B sample means. Two quantities play very different roles:
+
+- **n** is the sample size within each simulated study. Increasing n is what the CLT says should make the sampling distribution more normal.
+- **B** is the number of Monte Carlo repetitions. Increasing B does not change the sampling distribution; it only makes the simulation's picture of it sharper and less noisy.
+
+I used **B = 10,000** for initial sweeps across a wide range of n, then **B = 50,000** to confirm results near each cutoff. All simulations were seeded with the last four digits of my student ID, so every result in this repository is reproducible.
+
+## Definition of "approximately normal"
+
+I applied a single standard to every population. A sampling distribution was called approximately normal when it met **all** of the following:
+
+| Criterion | Threshold | What it detects |
+|---|---|---|
+| Skewness | \|skewness\| < 0.2 | Asymmetry (e.g., long right tails) |
+| Excess kurtosis | \|excess kurtosis\| < 0.5 | Tails that are too heavy or too light |
+| Q-Q correlation | > 0.998 | Any departure from a straight Q-Q line, including discreteness "staircases" |
+| Visual check | No clear pattern in histogram or Q-Q plot | Problems not captured by summary statistics |
+
+**Justification.** The skewness and kurtosis thresholds are roughly 8–10 times larger than the Monte Carlo noise in those statistics at B = 10,000 (about ±0.025 and ±0.05 for near-normal data), so a failure reflects real non-normality rather than random variation. They are also loose enough to reflect practical use: mild skewness of 0.2 has little effect on confidence intervals. The Q-Q correlation cutoff was **calibrated to the skewness rule**: exponential sample means at n = 100 have a theoretical skewness of exactly 0.2 and a Q-Q correlation of about 0.999, so I set the cutoff at 0.998 so the two criteria agree.
+
+No single measure is sufficient on its own. A uniform distribution has skewness 0 but is clearly not normal (caught by kurtosis); a discrete distribution can have near-zero skewness and kurtosis but a staircase Q-Q plot (caught by Q-Q correlation). I did not use the Shapiro–Wilk test as a deciding criterion, because with thousands of simulated means it detects departures too small to matter in practice.
+
+## Stability rule
+
+Near a threshold, random noise can cause the verdict to flip between consecutive sample sizes. I therefore reported the smallest tested n that passed **and for which every larger tested n also passed**. When results flip-flopped, I increased B and narrowed the grid of n values.
+
+## Controls
+
+For the two assumption-violating populations, I ran a **control** alongside the main experiment, identical in every respect except the violated assumption. This isolates the effect of the violation itself.
+
+# Results
+
+```{r}
+#| label: summary-table
+summary_df <- data.frame(
+  population = c("Standard normal", "Continuous uniform", "Binomial(20, 0.5)",
+                 "Six-sided die", "Life/death mixture", "Poisson(1)",
+                 "Binomial(5, 0.1)", "Exponential(1)", "Non-identical Bernoulli",
+                 "Dependent failures", "Cauchy"),
+  file = c("01", "02", "07", "03", "11", "05", "06", "04", "10", "09", "08"),
+  n = c(1, 3, 5, 9, 19, 35, 69, 110, 120, 425, NA),
+  skewness = c(0.024, -0.008, 0.018, -0.007, -0.186, 0.146, 0.139, 0.175, -0.061, 0.188, -58.163),
+  excess_kurtosis = c(0.000, -0.403, -0.021, -0.182, -0.084, 0.039, -0.023, 0.043, 0.011, 0.044, 4480.45),
+  qq_cor = c(0.9999, 0.9987, 0.9983, 0.9982, 0.9989, 0.9982, 0.9981, 0.9991, 0.9981, 0.999, 0.2026),
+  deciding = c("None", "Kurtosis", "Q-Q correlation", "Q-Q correlation", "Skewness",
+               "Q-Q correlation", "Q-Q correlation", "Skewness", "Q-Q correlation",
+               "Skewness", "All (never passes)"),
+  observation = c(
+    "Control experiment; normal at every n",
+    "Symmetric but light-tailed; triangle shape at n = 2",
+    "Already bell-shaped; only discreteness to overcome",
+    "Same shape as uniform, but discreteness triples n",
+    "Bimodal; four humps at n = 3 that merge by n ≈ 19",
+    "Skewed and discrete; discreteness finishes last",
+    "Very skewed with large steps; fuzzy cutoff near 60–70",
+    "Strong right skew; n = 30 clearly fails",
+    "Matches identical control (also n = 120)",
+    "More precise but slower than independent control (n = 250)",
+    "Averages never settle; spread identical at n = 1 and 1,000"
+  )
+)
+
+display_df <- summary_df
+display_df$n <- ifelse(is.na(display_df$n), "None", display_df$n)
+names(display_df) <- c("Population", "File", "Smallest n", "Skewness at n",
+                       "Excess kurtosis at n", "Q-Q correlation at n",
+                       "Deciding check", "Key observation")
+
+knitr::kable(display_df, align = "llrrrrll",
+             caption = "Smallest sample size judged approximately normal, with diagnostics at that n. Cauchy diagnostics are shown at n = 1,000.")
+```
+
+```{r}
+#| label: fig-summary
+#| fig-cap: "Smallest sample size at which the sampling distribution of the mean met my normality standard (log scale). The dashed line marks the n = 30 rule of thumb. The Cauchy distribution never met the standard and is not shown."
+#| fig-height: 5.5
+#| fig-width: 9
+d <- summary_df[!is.na(summary_df$n), ]
+d <- d[order(d$n), ]
+cols <- c("None" = "gray50", "Kurtosis" = "seagreen",
+          "Q-Q correlation" = "steelblue", "Skewness" = "darkorange")
+y <- seq_len(nrow(d))
+
+par(mar = c(4.5, 13, 2, 1))
+plot(d$n, y, log = "x", xlim = c(1, 800), ylim = c(0.5, nrow(d) + 0.8),
+     pch = 19, cex = 1.6, col = cols[d$deciding],
+     yaxt = "n", ylab = "", xlab = "Smallest n judged approximately normal (log scale)")
+segments(1, y, d$n, y, col = cols[d$deciding], lwd = 3)
+axis(2, at = y, labels = d$population, las = 1)
+text(d$n, y, d$n, pos = 4, cex = 0.85)
+abline(v = 30, lty = 2, col = "firebrick", lwd = 2)
+text(30, nrow(d) + 0.6, "n = 30", col = "firebrick", pos = 4, cex = 0.9)
+legend("bottomright", legend = names(cols), col = cols, pch = 19,
+       pt.cex = 1.4, bty = "n", title = "Deciding check")
+```
+
+# Question 1: Is there a universal sample size?
+
+**No.** Under a single, consistently applied standard, the required sample size varied by more than two orders of magnitude, from n = 1 to n = 425, and was infinite for the Cauchy distribution.
+
+The **n = 30 rule** was sufficient for 5 of the 11 populations (normal, uniform, Binomial(20, 0.5), die, and life/death mixture) and **insufficient for 6**: Poisson(1), Binomial(5, 0.1), exponential, non-identical Bernoulli, dependent failures, and Cauchy. At n = 30, the exponential sampling distribution still had skewness 0.31, and its Q-Q plot bent visibly upward at the upper end.
+
+The rule of thumb is best understood as a reasonable default for populations that are roughly symmetric and continuous. It is not a theorem, and it can be badly wrong for skewed, discrete, or dependent data.
+
+# Question 2: What makes some populations converge faster?
+
+Across all populations, the obstacles to normality fell into four distinct categories. Each one was detected by a different diagnostic, and the slowest obstacle determined each population's answer.
+
+| Obstacle | How it shrinks with n | Detected by | Populations limited by it |
+|---|---|---|---|
+| **Skewness** | γ / √n (slow) | Skewness, Q-Q curvature | Exponential, life/death, dependent failures |
+| **Tail weight** | κ / n (fast) | Excess kurtosis, Q-Q ends | Uniform |
+| **Discreteness** | step size / σ shrinks like 1/√n | Q-Q correlation (staircase) | Die, Binomial(20, 0.5), Poisson, Binomial(5, 0.1), non-identical Bernoulli |
+| **Infinite variance** | does not shrink | All measures | Cauchy |
+
+**Skewness was the most important factor.** Because skewness shrinks only like 1/√n, while excess kurtosis shrinks like 1/n, skewed populations converge far more slowly than symmetric ones with unusual tails. Setting γ/√n = 0.2 gives a simple prediction, **n ≈ 25γ²**, which closely matched my results for skewness-limited populations:
+
+```{r}
+#| label: skew-prediction
+pred_df <- data.frame(
+  Population = c("Exponential(1)", "Life/death mixture", "Independent control (dependent model)",
+                 "Poisson(1)", "Binomial(5, 0.1)"),
+  `Population skewness` = c(2.000, -0.862, 2.866, 1.000, 1.193),
+  check.names = FALSE
+)
+pred_df$`Predicted n (25γ²)` <- ceiling(25 * pred_df$`Population skewness`^2)
+pred_df$`Observed n` <- c(110, 19, 250, 35, 69)
+pred_df$`Deciding check` <- c("Skewness", "Skewness", "Skewness",
+                              "Q-Q correlation", "Q-Q correlation")
+knitr::kable(pred_df, align = "lrrrl",
+             caption = "Skewness-based prediction versus observed sample size.")
+```
+
+For the three populations where skewness decided the answer, the prediction was close (100 vs. 110, 19 vs. 19, and 206 vs. 250). For Poisson(1) and Binomial(5, 0.1), the observed n was **larger** than predicted, because discreteness became the final obstacle after skewness had already passed.
+
+**Discreteness was a separate, often-overlooked obstacle.** The continuous uniform and the six-sided die have nearly identical shapes, yet the die required **n = 9** compared with **n = 3**. The die's sample means can only take a limited set of values, producing a staircase in the Q-Q plot that kurtosis cannot detect. Binomial(20, 0.5) converged faster than the die (n = 5) because its 21 possible values are spread over a wider range, making each step small relative to the distribution's spread.
+
+**The population does not need to look like a bell curve.** The life/death mixture is bimodal, and its mean falls in a valley where few observations occur, yet it needed only n = 19, fewer than Poisson(1). At n = 3 its sampling distribution showed four distinct humps, corresponding to samples containing 0, 1, 2, or 3 early deaths, which blended into a single bell shape as the number of possible combinations grew.
+
+# Question 3: What happens when assumptions fail?
+
+The three assumption-violating populations produced three very different outcomes.
+
+```{r}
+#| label: assumptions-table
+assump_df <- data.frame(
+  Assumption = c("Finite mean and variance", "Identically distributed", "Independent"),
+  Population = c("Cauchy", "Non-identical Bernoulli (basketball fatigue)", "Dependent machine failures"),
+  Control = c("None (failure is total)", "Identical Bernoulli(0.7)", "Independent draws, same distribution"),
+  `Result with violation` = c("Never normal", "n = 120", "n = 425"),
+  `Result for control` = c("—", "n = 120", "n = 250"),
+  Effect = c("CLT fails completely", "No measurable effect", "More precise, but slower to become normal"),
+  check.names = FALSE
+)
+knitr::kable(assump_df, align = "lllccl")
+```
+
+**Infinite variance (Cauchy): complete failure.** The interquartile range of the sample means stayed at about 2.0 at every sample size from n = 1 to n = 1,000 (2.008, 1.965, 2.018, 2.012), exactly the IQR of a single Cauchy observation. If the CLT applied, it would have shrunk to about 0.06 at n = 1,000. Skewness and kurtosis estimates were huge and erratic (kurtosis in the thousands), because the quantities they estimate do not exist. Averaging 1,000 Cauchy values produces something just as spread out as a single value.
+
+**Non-identical distribution: no effect.** Shots with success probabilities decreasing from 0.9 to 0.5 produced the same cutoff as identical shots with p = 0.7 (n = 120 in both cases), with nearly identical diagnostics at every n. Reversing the order of the probabilities also gave n = 120. The identical-distribution assumption simplifies the basic CLT, but it is not required: more general versions (Lindeberg–Feller) allow observations to differ, provided no single observation dominates the total. Here every observation has a similar, bounded variance.
+
+**Dependence: more precise, but slower.** The dependent failure model has lag-1 correlation −0.366: long operating times tend to be followed by short ones. This **negative** dependence had two opposite effects:
+
+- **Precision improved.** The standard deviation of the dependent sample means was 15–30% smaller than the independent control's (e.g., 0.79 vs. 1.14 at n = 5; 0.22 vs. 0.25 at n = 100), because long and short runs cancel within each sample. The common warning that dependence reduces the effective sample size applies to *positive* dependence; for negative dependence the effect is reversed.
+- **Normality was delayed.** At the same n, the dependent means were consistently more skewed, and the required sample size rose from 250 to 425.
+
+A practical consequence is that the standard formula σ/√n gave the wrong standard error for dependent data. Here it overestimated the error (confidence intervals would be too wide); under positive dependence it would underestimate it, which is more dangerous.
+
+**Sample size alone does not justify the CLT.** A large n does not rescue a population with infinite variance, and the formula for the standard error depends on whether observations are independent.
+
+# Reproducibility experiment
+
+To check whether my conclusions depend on a particular random seed, I reran the exponential cutoff analysis (n = 80 to 140, B = 50,000) with a different seed and compared it with the original.
+
+```{r}
+#| label: reproducibility
+set.seed(student_id)
+original <- sweep_n(function(n) rexp(n, rate = 1),
+                    n_values = seq(80, 140, by = 10), B = 50000)
+
+set.seed(2026)
+new_seed <- sweep_n(function(n) rexp(n, rate = 1),
+                    n_values = seq(80, 140, by = 10), B = 50000)
+
+repro <- data.frame(
+  n = original$n,
+  skew_original = original$skewness,
+  skew_new_seed = new_seed$skewness,
+  passes_original = original$passes,
+  passes_new_seed = new_seed$passes
+)
+knitr::kable(repro, align = "rrrcc",
+             caption = "Exponential cutoff with the original seed and a different seed.")
+```
+
+**Did the exact results change?** Yes. The skewness estimates differed at every sample size, by as much as 0.035 (for example, 0.175 vs. 0.210 at n = 110). With the new seed, the verdict also flipped back and forth: n = 90 and 100 passed, n = 110 failed, and every n from 120 onward passed. Under my stability rule, the new seed gives a cutoff of n = 120, compared with n = 110 for the original seed.
+
+**Did the scientific conclusion change?** Not in substance. The cutoff moved by one step of my grid, and both seeds place it between n = 100 and n = 120, consistent with the theoretical value of n = 100 (where skewness 2/√n equals exactly 0.2). Under both seeds, the exponential distribution needs roughly four times the n = 30 rule of thumb. What the experiment shows is that the exact cutoff for a population sitting right on my threshold is only accurate to within about ±10, which is why I report cutoffs as approximate in the Limitations section.
+
+Exact numbers in a Monte Carlo study depend on the seed, but a well-designed simulation should lead to the same conclusion regardless of seed. Fixing the seed makes results exactly reproducible; varying it tests whether they are robust. In this experiment the broad conclusion held, but the exact cutoff moved by one grid step, because the exponential population sits right on my threshold: its skewness at n = 100 is exactly 0.2 in theory. Cutoffs near a threshold are the most sensitive to the seed, which is why I increased B, used a stability rule near every cutoff, and report each cutoff as approximate rather than exact.
+
+# Limitations
+
+- **The threshold values are a choice.** A stricter standard (e.g., |skewness| < 0.1) would roughly quadruple the required n for skewness-limited populations. The *ranking* of populations, however, would largely stay the same.
+- **Cutoffs are fuzzy, not sharp.** Convergence is gradual. For several populations (Binomial(5, 0.1), dependent failures), the diagnostics stayed near the threshold across a range of n, so the reported value should be read as approximate.
+- **Grid resolution.** Some cutoffs were located in steps of 5, 10, or 25 rather than every integer.
+- **Synthetic populations.** The life/death and dependent failure models are stylized and are not fitted to real data.
+- **Only the sample mean was studied.** Other statistics (medians, variances, proportions near 0 or 1) converge at different rates.
+
+# Conclusion
+
+The Central Limit Theorem is remarkably robust: it worked for symmetric and skewed populations, continuous and discrete ones, bimodal shapes, non-identical observations, and even dependent data. But **how fast** it works varies enormously, and no single sample size is appropriate for every situation. Skewness was the strongest predictor of how large n must be, discreteness added an independent delay, and the CLT's assumptions mattered unequally: infinite variance was fatal, non-identical observations were harmless, and dependence changed both the precision and the shape of the sampling distribution.
+
+Rather than relying on n = 30, a better practice is to ask what the population looks like (how skewed, how discrete, how heavy-tailed, and whether observations are independent) and, when in doubt, to check with simulation.
+
+# Repository guide {.unnumbered}
+
+| File | Contents |
+|---|---|
+| `R/clt_functions.R` | Shared functions: simulation, skewness, kurtosis, Q-Q correlation, normality rule, sweeps, plots |
+| `n vs B.qmd` | Warm-up: the difference between n and B, and calibration of the Q-Q cutoff |
+| `01-normal.qmd` | Standard normal (control experiment) |
+| `02-uniform.qmd` | Continuous uniform |
+| `03-die.qmd` | Six-sided die |
+| `04-exponential.qmd` | Exponential(1) |
+| `05-poisson.qmd` | Poisson(1) |
+| `06-binomial-small.qmd` | Binomial(5, 0.1) |
+| `07-binomial-large.qmd` | Binomial(20, 0.5) |
+| `08-cauchy.qmd` | Cauchy (finite-variance assumption violated) |
+| `09-dependent.qmd` | Dependent machine failures (independence violated) |
+| `10-nonidentical-bernoulli.qmd` | Basketball fatigue (identical-distribution assumption violated) |
+| `11-life-death.qmd` | Bimodal age-at-death mixture |
+| `12-summary.qmd` | This summary |
