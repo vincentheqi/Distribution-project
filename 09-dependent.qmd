@@ -1,0 +1,189 @@
+---
+title: "Population 9: Dependent Machine Failures"
+format:
+  html:
+    embed-resources: true
+    toc: true
+---
+
+```{r}
+#| label: setup
+source("R/clt_functions.R")
+student_id <- 5405
+
+# Model parameters (from the instructor's dependent failure model)
+baseline_rate  <- 1
+beta           <- 1.25
+reference_time <- 1
+
+# Generate ONE dependent sequence of n operating times.
+# An Exponential(1) value divided by a rate gives an Exponential(rate) value.
+gen_dep <- function(n) {
+  e <- rexp(n, rate = 1)
+  x <- numeric(n)
+  x[1] <- e[1] / baseline_rate                     # first time: baseline rate
+  if (n > 1) {
+    for (t in 2:n) {
+      rate_t <- baseline_rate * exp(beta * (x[t - 1] - reference_time))
+      x[t] <- e[t] / rate_t                        # depends on the previous time
+    }
+  }
+  x
+}
+
+# One very long chain to estimate the long-run behavior
+set.seed(student_id)
+long_chain <- gen_dep(1e6)[-(1:1000)]              # drop the first 1000 as burn-in
+
+mu_long    <- mean(long_chain)
+sigma_long <- sd(long_chain)
+lag1_cor   <- cor(long_chain[-1], long_chain[-length(long_chain)])
+
+data.frame(
+  long_run_mean   = round(mu_long, 3),
+  long_run_sd     = round(sigma_long, 3),
+  lag1_correlation = round(lag1_cor, 3),
+  skewness        = round(skew(long_chain), 3),
+  excess_kurtosis = round(kurt(long_chain), 3)
+)
+
+# Control: INDEPENDENT draws from the same long-run distribution
+gen_indep <- function(n) sample(long_chain, n, replace = TRUE)
+```
+
+## 1. What population am I sampling from?
+
+This population models the operating times of a machine between failures, where each operating time depends on the previous one. The failure rate for the next period is λₜ = e^{1.25(Xₜ₋₁ − 1)}, and the next operating time is drawn from an Exponential(λₜ) distribution. If the machine ran for a long time, the failure rate goes up, so the next run tends to be short. If it ran for a short time, the next run tends to be long. The first plot below shows this as a zigzag pattern of long spikes followed by very short runs.
+
+This population breaks the CLT’s assumption that observations are independent. Because there is no simple formula for its long-run behavior, I simulated one chain of one million operating times (dropping the first 1,000 as burn-in). The long-run mean is 1.675, the standard deviation is 2.547, and the lag-1 correlation is −0.366, which confirms negative dependence. The long-run distribution is strongly right-skewed (skewness 2.87) with very heavy tails (excess kurtosis 11.95), even more extreme than a plain exponential distribution (2 and 6).
+
+To isolate the effect of dependence, I created a control: independent draws sampled at random from the same long chain. The control has exactly the same distribution of individual values, but no dependence between them.
+
+```{r}
+#| label: population
+#| fig-height: 8
+par(mfrow = c(3, 1), mar = c(4, 4, 2.5, 1))
+
+plot(long_chain[1:60], type = "b", pch = 16, col = "steelblue",
+     xlab = "Failure number", ylab = "Operating time",
+     main = "First 60 operating times (note the long/short zigzag)")
+abline(h = mu_long, col = "firebrick", lty = 2)
+
+plot(long_chain[1:5000][-5000], long_chain[1:5000][-1],
+     pch = 16, cex = 0.4, col = adjustcolor("steelblue", 0.4),
+     xlab = "Previous operating time", ylab = "Next operating time",
+     main = paste("Previous vs. next time (lag-1 correlation =", round(lag1_cor, 3), ")"))
+
+hist(long_chain, breaks = 80, probability = TRUE, col = "gray85", border = "white",
+     xlab = "Operating time", main = "Long-run distribution of operating times")
+
+par(mfrow = c(1, 1))
+```
+
+## 2. What did I expect?
+
+The textbook warning is that dependent data have a smaller “effective sample size.” That is true for positive dependence, where similar values cluster together. Here the dependence is negative: long and short runs alternate, so within each sample they should partly cancel. I expected the dependent sample means to be less spread out than the independent ones.
+
+Because the long-run distribution has finite variance and the dependence fades quickly (each value only depends directly on the one before it), I expected the CLT to still work eventually. However, because the distribution is very skewed (skewness 2.87), I expected both versions to need large samples. For the independent control, skewness 2.87/√n reaches 0.2 at about n = 205.
+
+## 3. Which sample sizes did I investigate?
+
+```{r}
+#| label: sweep
+set.seed(student_id)
+results <- sweep_n(gen_dep, n_values = c(10, 30, 50, 100, 150, 200, 300, 400, 500))
+results
+```
+
+```{r}
+#| label: sweep-control
+set.seed(student_id)
+control <- sweep_n(gen_indep, n_values = c(10, 30, 50, 100, 150, 200, 300, 400, 500))
+control
+```
+
+```{r}
+#| label: se-check
+set.seed(student_id)
+se_table <- do.call(rbind, lapply(c(5, 10, 30, 100), function(n) {
+  dep <- simulate_means(gen_dep, n)
+  ind <- simulate_means(gen_indep, n)
+  data.frame(
+    n              = n,
+    sd_dependent   = round(sd(dep), 4),
+    sd_independent = round(sd(ind), 4),
+    iid_theory     = round(sigma_long / sqrt(n), 4),
+    ratio_dep_ind  = round(sd(dep) / sd(ind), 3)
+  )
+}))
+se_table
+```
+```{r}
+#| label: sweep-confirm
+set.seed(student_id)
+confirm <- sweep_n(gen_dep, n_values = seq(300, 400, by = 25), B = 50000)
+confirm
+```
+```{r}
+#| label: sweep-confirm-control
+set.seed(student_id)
+confirm_control <- sweep_n(gen_indep, n_values = seq(200, 300, by = 25), B = 50000)
+confirm_control
+```
+```{r}
+#| label: sweep-confirm-2
+set.seed(student_id)
+confirm2 <- sweep_n(gen_dep, n_values = seq(425, 500, by = 25), B = 50000)
+confirm2
+```
+
+I first ran both versions from n = 1 to 150 with B = 10,000; neither passed, so I extended the sweep to n = 500. The control first passed around n = 300 and the dependent version around n = 400. The skewness estimates were noisy at this scale (for example, the dependent skewness rose from 0.357 at n = 100 to 0.365 at n = 150), because the population’s heavy tails make the skewness estimate itself unstable. So I confirmed both cutoffs with B = 50,000.
+
+For the control, I tested n = 200 to 300 in steps of 25: it passed at 200, failed at 225 (skewness 0.203), and passed from 250 onward. For the dependent version, I tested n = 300 to 500 in steps of 25: skewness stayed near 0.21–0.22 through n = 350, passed at 375, failed narrowly at 400 (0.201), and then passed at every n from 425 to 500.
+
+I also compared the spread of the sample means with and without dependence at n = 5, 10, 30, and 100.
+
+## 4. When did it become approximately normal?
+
+$$\boxed{n = 425}$$
+Under my rule, the sampling distribution of the mean becomes approximately normal at n = 425 (the smallest tested value, in steps of 25, that passed along with every larger value). The independent control needed n = 250.
+## 5. Why did I choose that value?
+
+```{r}
+#| label: plots-compare
+#| fig-height: 10
+set.seed(student_id)
+means_ctrl_250 <- simulate_means(gen_indep, n = 250)
+means_dep_250  <- simulate_means(gen_dep,   n = 250)
+means_dep_425  <- simulate_means(gen_dep,   n = 425)
+
+# Red curve uses each set's own simulated mean and SD, so this tests SHAPE only.
+shape_plot <- function(means, n, label) {
+  plot_means(means, mu = mean(means), sigma = sd(means) * sqrt(n), n = n)
+  title(sub = label, line = -1, cex.sub = 0.9)
+}
+
+par(mfrow = c(3, 2))
+shape_plot(means_ctrl_250, 250, "Independent control")
+shape_plot(means_dep_250,  250, "Dependent")
+shape_plot(means_dep_425,  425, "Dependent")
+par(mfrow = c(1, 1))
+```
+
+My rule requires |skewness| < 0.2, |excess kurtosis| < 0.5, and a Q-Q correlation above 0.998.
+
+For both versions, kurtosis and the Q-Q correlation passed before skewness, so skewness was the deciding check. With B = 50,000, the dependent skewness was 0.201 at n = 400 (fail) and between 0.184 and 0.190 for every n from 425 to 500 (pass). n = 375 also passed (0.192), but because n = 400 failed afterward, it does not count under my stability rule.
+
+Dependence had two opposite effects. First, it made the sample means more precise. At every sample size I checked, the standard deviation of the dependent means was smaller than the independent control’s (for example, 0.79 vs. 1.14 at n = 5, and 0.22 vs. 0.25 at n = 100). The control matched the independent formula σ/√n almost exactly, which confirms the control is valid. Because long and short runs cancel within each sample, negative dependence gives a larger effective sample size, not a smaller one. Someone who wrongly assumed independence would overestimate the standard error, so their confidence intervals would be too wide.
+
+Second, dependence made the sampling distribution slower to become normal. At the same n, the dependent means were consistently more skewed than the control (0.653 vs. 0.512 at n = 30, and 0.286 vs. 0.214 at n = 150 in my first sweep). The plots show this: at n = 250, the control’s histogram is nearly symmetric and its Q-Q plot is close to straight, while the dependent version at n = 250 still has a longer right tail and an upward bend at the top of its Q-Q plot. At n = 425, the dependent version’s histogram and Q-Q plot look similar to the control’s at n = 250.
+
+Because there is no simple formula for the standard error of a dependent mean, the red curves in these plots use each set’s own simulated mean and standard deviation. They test the shape of the distribution, not its spread.
+
+## 6. What surprised me?
+
+I was surprised that dependence made the sample means more precise but less normal at the same time. I expected dependence to hurt in every way. Instead, negative dependence reduced the spread of the means, while also slowing down how quickly their shape became normal. These turned out to be two separate questions, precision and shape, and dependence affected them in opposite directions.
+
+I was also surprised that the “effective sample size is smaller” warning did not apply here. That warning assumes positive dependence. With negative dependence, the effect reverses. This showed me that the direction of dependence matters, not just whether it exists.
+
+Finally, this population took more computing effort than any other. Each simulated sample required a loop, so the B = 50,000 checks at n = 300 to 500 took several minutes. Combined with the very noisy skewness estimates, it taught me that heavy-tailed, dependent data need much more simulation to reach a stable conclusion.
