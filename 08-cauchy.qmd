@@ -1,0 +1,110 @@
+---
+title: "Population 8: Cauchy"
+format:
+  html:
+    embed-resources: true
+    toc: true
+---
+
+```{r}
+#| label: setup
+source("R/clt_functions.R")
+student_id <- 5405
+```
+
+## 1. What population am I sampling from?
+
+The population is the standard Cauchy distribution, centered at 0 with scale 1. Near the center it looks like a bell curve, as the zoomed histogram below shows, but its tails are extremely heavy. Out of 10,000 simulated values, the most extreme were beyond ±10,000. Because the tails are so heavy, the Cauchy distribution has no mean and no variance. Its center is described by its median (0), and its spread by its interquartile range (IQR = 2).
+
+This population breaks one of the CLT’s assumptions: that the population has a finite mean and variance. I wanted to see whether the CLT still works when that assumption fails.
+
+```{r}
+#| label: population
+set.seed(student_id)
+pop <- rcauchy(10000)
+summary(pop)
+
+hist(pop[abs(pop) < 10], breaks = 80, probability = TRUE,
+     main = "Population: Cauchy(0, 1), zoomed to [-10, 10]",
+     xlab = "Individual value")
+```
+
+## 2. What did I expect?
+
+I expected the CLT to fail. The CLT says the sample mean is approximately N(μ, σ/√n), but for the Cauchy distribution, μ and σ do not exist, so there is nothing for the sampling distribution to converge to. In fact, it is known that the average of n Cauchy values has exactly the same Cauchy distribution as a single value. So I expected the sampling distribution to look the same at every n: the spread wouldn’t shrink, extreme values wouldn’t disappear, and my normality checks would fail at every sample size.
+
+## 3. Which sample sizes did I investigate?
+
+```{r}
+#| label: sweep
+set.seed(student_id)
+results <- sweep_n(function(n) rcauchy(n), n_values = c(1, 10, 100, 1000))
+results
+```
+
+```{r}
+#| label: spread-check
+set.seed(student_id)
+n_values <- c(1, 10, 100, 1000)
+
+spread <- do.call(rbind, lapply(n_values, function(n) {
+  means <- simulate_means(function(m) rcauchy(m), n)
+  data.frame(
+    n          = n,
+    q25        = round(quantile(means, 0.25), 3),
+    median     = round(median(means), 3),
+    q75        = round(quantile(means, 0.75), 3),
+    IQR        = round(IQR(means), 3),
+    pct_beyond_10 = round(100 * mean(abs(means) > 10), 2),
+    row.names  = NULL
+  )
+}))
+spread
+```
+
+I tested n = 1, 10, 100, and 1,000 with B = 10,000. I used a much wider range than for the other populations, because I wanted to see whether anything changed even at very large n. Since skewness and kurtosis don’t exist for this population, I added a spread check. For each n, I calculated the quartiles, the IQR, and the percentage of sample means beyond ±10. If the CLT worked, the IQR should shrink like 1/√n and the percentage beyond ±10 should drop to 0.
+
+## 4. When did it become approximately normal?
+
+$$\boxed{\text{No value of } n}$$
+The sampling distribution of the mean never becomes approximately normal, no matter how large n is.
+
+## 5. Why did I choose that value?
+
+```{r}
+#| label: plots-compare
+#| fig-height: 7
+set.seed(student_id)
+means_1    <- simulate_means(function(n) rcauchy(n), n = 1)
+means_1000 <- simulate_means(function(n) rcauchy(n), n = 1000)
+
+zoom_plot <- function(means, n) {
+  inside <- means[abs(means) < 10]
+  hist(inside, breaks = 80, probability = TRUE, xlim = c(-10, 10),
+       main = paste("Sample means, n =", n, "(zoomed)"), xlab = "Sample mean")
+  # Cauchy curve, rescaled because the histogram only shows |x| < 10
+  curve(dcauchy(x) / (2 * pcauchy(10) - 1), add = TRUE,
+        col = "firebrick", lwd = 2)
+  qqnorm(means, main = paste("Q-Q plot, n =", n))
+  qqline(means, col = "firebrick", lwd = 2)
+}
+
+par(mfrow = c(2, 2))
+zoom_plot(means_1, 1)
+zoom_plot(means_1000, 1000)
+par(mfrow = c(1, 1))
+```
+
+Every sample size failed all three checks badly. Skewness ranged from 11 to −58, excess kurtosis was in the thousands, and the Q-Q correlation stayed between 0.13 and 0.20. Even more importantly, these numbers did not improve as n increased. They jumped around randomly, because each estimate was controlled by whichever single value happened to be most extreme.
+
+The spread check gives the clearest evidence. The IQR of the sample means stayed at about 2.0 at every sample size (2.008, 1.965, 2.018, 2.012), which equals the IQR of a single Cauchy value. If the CLT worked, the IQR would have shrunk to about 0.06 at n = 1,000. The percentage of sample means beyond ±10 also stayed at about 6–7%, matching the 6.3% expected for a single Cauchy value.
+
+The plots agree. The zoomed histograms at n = 1 and n = 1,000 look the same, and both match the Cauchy density curve, not a normal curve. The Q-Q plots are nearly flat lines with a few extreme points far off the ends: a handful of huge values stretch the scale so much that the rest of the data is squeezed into a line near 0. Averaging 1,000 Cauchy values produces something just as spread out and extreme as a single value, so no sample size is large enough.
+
+## 6. What surprised me?
+
+The most surprising thing was that averaging didn’t help at all. With every other population, larger samples made the mean more stable. Here, the average of 1,000 values was exactly as unpredictable as one value. I had assumed that averaging always cancels out extreme values, but with the Cauchy distribution, extreme values are so common and so large that one of them can always pull the average far away.
+
+I was also surprised by how meaningless the skewness and kurtosis numbers became. They were huge, changed sign, and didn’t follow any pattern, because they were trying to estimate quantities that don’t exist. This showed me that I can’t blindly trust summary statistics; I need to know whether the population quantity they estimate actually exists.
+
+Finally, this population shows why “the sample size is large” is not enough to justify using the CLT. The assumptions matter: without a finite variance, no sample size is large enough.
