@@ -1,0 +1,110 @@
+---
+title: "Population 6: Binomial (Small)"
+format:
+  html:
+    embed-resources: true
+    toc: true
+---
+
+```{r}
+#| label: setup
+source("R/clt_functions.R")
+student_id <- 5405
+```
+
+## 1. What population am I sampling from?
+
+The population is a binomial distribution with 5 trials and success probability p = 0.1. Each value counts the number of successes in 5 tries, such as defective items in a box of 5 when each item has a 10% chance of being defective. It can only take whole numbers from 0 to 5, and as the bar chart below shows, it is almost always 0 or 1. Its mean is np = 0.5 and its standard deviation is √(np(1 − p)) ≈ 0.671. It is strongly right-skewed (skewness ≈ 1.19) with excess kurtosis ≈ 1.02.
+
+There are two different “n”s here: the binomial’s 5 trials (size = 5 in R) and my sample size n, the number of binomial values averaged in each simulated sample. This population is both discrete and skewed, like Poisson(1), but more skewed and with fewer possible values.
+
+```{r}
+#| label: population
+set.seed(student_id)
+pop <- rbinom(10000, size = 5, prob = 0.1)
+barplot(table(pop), main = "Population: Binomial(size = 5, p = 0.1)",
+        xlab = "Number of successes", ylab = "Frequency")
+```
+
+## 2. What did I expect?
+
+For sample means, skewness ≈ 1.19/√n and excess kurtosis ≈ 1.02/n. Kurtosis falls below 0.5 at about n = 3, and skewness reaches 0.2 at about n = 36. Because this population is discrete, I expected the Q-Q staircase to delay the result, as it did for Poisson. Since this population is more skewed than Poisson(1) and its steps are larger relative to its spread (σ ≈ 0.67 vs. 1), I expected it to need more observations than Poisson’s n = 35, possibly 50 or more.
+
+## 3. Which sample sizes did I investigate?
+
+```{r}
+#| label: sweep
+set.seed(student_id)
+results <- sweep_n(function(n) rbinom(n, size = 5, prob = 0.1),
+                   n_values = c(1, 2, 5, 10, 20, 30, 40, 50, 75, 100, 150))
+results
+```
+```{r}
+#| label: sweep-confirm
+set.seed(student_id)
+confirm <- sweep_n(function(n) rbinom(n, size = 5, prob = 0.1),
+                   n_values = seq(50, 75, by = 5), B = 50000)
+confirm
+```
+```{r}
+#| label: sweep-confirm-exact
+set.seed(student_id)
+confirm2 <- sweep_n(function(n) rbinom(n, size = 5, prob = 0.1),
+                    n_values = 61:65, B = 50000)
+confirm2
+```
+```{r}
+#| label: sweep-confirm-exact-2
+set.seed(student_id)
+confirm3 <- sweep_n(function(n) rbinom(n, size = 5, prob = 0.1),
+                    n_values = 66:69, B = 50000)
+confirm3
+```
+
+I first ran a wide sweep from n = 1 to 150 with B = 10,000. Skewness and kurtosis passed by about n = 30–40, but the Q-Q correlation failed until somewhere between 50 and 75. I then tested n = 50 to 75 in steps of 5 with B = 50,000. The verdict turned TRUE at n = 70 and stayed TRUE for 75, 100, and 150.
+
+To find the exact cutoff, I tested individual values with B = 50,000. The results flipped back and forth: n = 64 passed but 65 failed, and 67 passed but 68 failed. From about n = 55 to 70, the Q-Q correlation stayed nearly flat between 0.9978 and 0.9981, right at my 0.998 threshold, so small random differences changed the verdict. Using my stability rule (n counts only if every larger tested n also passes), the answer is n = 69.
+
+## 4. When did it become approximately normal?
+
+$$\boxed{n = 69}$$
+Under my rule, the sampling distribution of the mean becomes approximately normal at n = 69, and every larger sample size I tested (70, 75, 100, 150) also passed.
+
+## 5. Why did I choose that value?
+
+```{r}
+#| label: plots-compare
+#| fig-height: 7
+n_a <- 30    # a sample size that fails  (update after the sweep)
+n_b <- 69   # your chosen sample size   (update after the sweep)
+
+mu    <- 5 * 0.1                  # np
+sigma <- sqrt(5 * 0.1 * 0.9)      # sqrt(np(1 - p))
+
+set.seed(student_id)
+means_a <- simulate_means(function(n) rbinom(n, size = 5, prob = 0.1), n = n_a)
+means_b <- simulate_means(function(n) rbinom(n, size = 5, prob = 0.1), n = n_b)
+
+par(mfrow = c(2, 2))
+plot_means(means_a, mu = mu, sigma = sigma, n = n_a,
+           breaks = seq(-0.5 / n_a, max(means_a) + 0.5 / n_a, by = 1 / n_a))
+plot_means(means_b, mu = mu, sigma = sigma, n = n_b,
+           breaks = seq(-0.5 / n_b, max(means_b) + 0.5 / n_b, by = 1 / n_b))
+par(mfrow = c(1, 1))
+```
+
+My rule requires |skewness| < 0.2, |excess kurtosis| < 0.5, and a Q-Q correlation above 0.998.
+
+Kurtosis passed early, by n = 5. Skewness passed at around n = 35–40, matching the theoretical value of about 0.2 at n = 36. The Q-Q correlation was the last check to pass, so for this population, discreteness was the final obstacle. n = 69 is the first sample size where the Q-Q correlation is above 0.998 and stays above it for every larger n I tested.
+
+The plots support this. At n = 30, the Q-Q plot shows a clear staircase, points sitting above the line at the lower-left (sample means cannot go below 0), and an upward bend at the upper-right from the remaining right skew. At n = 69, the steps are much finer and the points follow the line closely, with only a slight lift at the lower-left.
+
+I want to be honest that the cutoff is not sharp. Between about n = 60 and 70, the Q-Q correlation sits right on my threshold, and the verdict depends on random noise. A fair summary is that this population becomes approximately normal at about n = 70, with the transition happening gradually.
+
+One detail: n = 68 displayed a Q-Q correlation of 0.9980 but failed. This is because my table rounds to four decimals, while the pass/fail check uses the unrounded value, which was slightly below 0.998.
+
+## 6. What surprised me?
+
+I was surprised by how much the results flip-flopped near the cutoff, even with B = 50,000. I expected that once I increased B, each n would give a clear pass or fail. Instead, the Q-Q correlation changed so slowly in this range that differences of 0.0001 decided the verdict. This showed me why my stability rule is necessary: without it, I could have reported n = 64, which was just a lucky result.
+
+I was also surprised that this population needed nearly twice as many observations as Poisson(1) (69 vs. 35), even though both are discrete and skewed. Being only slightly more skewed, and having bigger steps relative to its spread, made a large difference.
