@@ -1,6 +1,8 @@
 # AI Interaction Log
 
-**Project:** How Fast Does Normal Happen? Stress-Testing the Central Limit Theorem **Tool used:** Claude (Anthropic)
+**Project:** How Fast Does Normal Happen? Stress-Testing the Central Limit Theorem
+
+**Tool used:** Claude (Anthropic)
 
 ## How I used AI
 

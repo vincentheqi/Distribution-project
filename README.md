@@ -89,7 +89,3 @@ Or open any `.qmd` file in RStudio and click **Render**. All simulations are see
 ## Tools
 
 R · Quarto · Git/GitHub · Monte Carlo simulation · Base R graphics
-
-## About
-
-Developed for MATH 167R at San José State University by **Zhanxiang (Vincent) He**.
