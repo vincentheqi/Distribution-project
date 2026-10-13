@@ -1,0 +1,92 @@
+---
+title: "Population 7: Binomial (Large)"
+format:
+  html:
+    embed-resources: true
+    toc: true
+---
+
+```{r}
+#| label: setup
+source("R/clt_functions.R")
+student_id <- 5405
+```
+
+## 1. What population am I sampling from?
+
+The population is a binomial distribution with 20 trials and success probability p = 0.5, like the number of heads in 20 coin flips. It takes whole-number values from 0 to 20. Its mean is np = 10 and its standard deviation is √(np(1 − p)) = √5 ≈ 2.236. Because p = 0.5, it is perfectly symmetric (skewness 0), and its excess kurtosis is only −0.1. As the bar chart below shows, it already looks like a bell curve.
+
+This makes a useful comparison with Binomial(5, 0.1): same family, but symmetric instead of skewed and with many more possible values. The only way it differs from a normal distribution is that it’s discrete.
+
+```{r}
+#| label: population
+set.seed(student_id)
+pop <- rbinom(10000, size = 20, prob = 0.5)
+barplot(table(pop), main = "Population: Binomial(size = 20, p = 0.5)",
+        xlab = "Number of successes", ylab = "Frequency")
+```
+
+## 2. What did I expect?
+
+Since skewness and kurtosis are already near 0, I expected both to pass at every sample size, including n = 1. The only check that could fail is the Q-Q correlation, because of the staircase pattern from whole-number values. Compared with the die (n = 9), this population has 21 possible values instead of 6 and a larger spread, so each step is smaller relative to the width of the distribution. I expected the staircase to smooth out faster than the die’s, giving an answer below n = 9.
+
+## 3. Which sample sizes did I investigate?
+
+```{r}
+#| label: sweep
+set.seed(student_id)
+results <- sweep_n(function(n) rbinom(n, size = 20, prob = 0.5),
+                   n_values = c(1:10, 15, 20, 30))
+results
+```
+```{r}
+#| label: sweep-confirm
+set.seed(student_id)
+confirm <- sweep_n(function(n) rbinom(n, size = 20, prob = 0.5),
+                   n_values = 3:7, B = 50000)
+confirm
+```
+
+Because I expected a small cutoff, I tested every value from n = 1 to 10, plus 15, 20, and 30, with B = 10,000. The Q-Q correlation crossed 0.998 between n = 4 (0.9978) and n = 5 (0.9983). Since these values were close to my threshold, I reran n = 3 to 7 with B = 50,000. The Q-Q correlation increased steadily (0.9972, 0.9979, 0.9983, 0.9986, 0.9988), and n = 5 was again the first sample size to pass, confirming the result.
+
+## 4. When did it become approximately normal?
+
+$$\boxed{n = 5}$$
+Under my rule, the sampling distribution of the mean becomes approximately normal at n = 5, and every larger sample size I tested also passed.
+
+## 5. Why did I choose that value?
+
+```{r}
+#| label: plots-compare
+#| fig-height: 7
+n_a <- 1   # a sample size that fails  (update after the sweep)
+n_b <- 5   # your chosen sample size   (update after the sweep)
+
+mu    <- 20 * 0.5                 # np
+sigma <- sqrt(20 * 0.5 * 0.5)     # sqrt(np(1 - p))
+
+set.seed(student_id)
+means_a <- simulate_means(function(n) rbinom(n, size = 20, prob = 0.5), n = n_a)
+means_b <- simulate_means(function(n) rbinom(n, size = 20, prob = 0.5), n = n_b)
+
+par(mfrow = c(2, 2))
+plot_means(means_a, mu = mu, sigma = sigma, n = n_a,
+           breaks = seq(min(means_a) - 0.5 / n_a, max(means_a) + 0.5 / n_a, by = 1 / n_a))
+plot_means(means_b, mu = mu, sigma = sigma, n = n_b,
+           breaks = seq(min(means_b) - 0.5 / n_b, max(means_b) + 0.5 / n_b, by = 1 / n_b))
+par(mfrow = c(1, 1))
+```
+
+My rule requires |skewness| < 0.2, |excess kurtosis| < 0.5, and a Q-Q correlation above 0.998.
+
+Skewness and kurtosis passed at every sample size, including n = 1 (skewness 0.023, kurtosis −0.078), because the population is already symmetric and bell-shaped. The Q-Q correlation was the only check that failed, and it passed from n = 5 onward.
+
+The plots show why. At n = 1, the histogram already follows the normal curve closely. Looking only at the histogram, I would call it normal. But the Q-Q plot is a clear staircase with steps of size 1, because each value is a whole number. At n = 5, the steps are one-fifth as large and the points follow the line closely. This shows that for this population, discreteness was the only obstacle to normality.
+
+## 6. What surprised me?
+
+I was surprised that the n = 1 histogram already looked normal, yet it still failed my rule. The histogram alone would have fooled me. Only the Q-Q plot revealed the staircase. This showed me why I need more than one type of evidence.
+
+I was also surprised by how different this population was from Binomial(5, 0.1). They come from the same family, but this one needed only n = 5, compared with n = 69. Changing p from 0.1 to 0.5 removed the skew, and having more trials made the steps smaller. This showed me that “binomial” is not a single behavior; the parameters matter a lot.
+
+Finally, I noticed this cutoff was much cleaner than Binomial(5, 0.1)’s. Here, the Q-Q correlation increased steeply near 0.998, so random noise could not flip the result. For Binomial(5, 0.1), the Q-Q correlation was nearly flat at the threshold, so the verdict flipped back and forth.
