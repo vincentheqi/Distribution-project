@@ -1,5 +1,5 @@
 ---
-title: "Population 10: Non-Identical Bernoulli"
+title: "Population 10: Non-Identical Bernoulli (Basketball Fatigue)"
 format:
   html:
     embed-resources: true
@@ -11,34 +11,34 @@ format:
 source("R/clt_functions.R")
 student_id <- 5405
 
-# Each observation i gets its own p, evenly spaced from 0.5 to 0.9
-gen_nonid <- function(n) rbinom(n, size = 1, prob = seq(0.5, 0.9, length.out = n))
-# Control: every observation has the same p = 0.7 (the average p)
+# Shot t has its own probability, decreasing evenly from 0.9 (fresh) to 0.5 (tired)
+gen_nonid <- function(n) rbinom(n, size = 1, prob = seq(0.9, 0.5, length.out = n))
+# Control: every shot has the same p = 0.7 (the average p)
 gen_id    <- function(n) rbinom(n, size = 1, prob = 0.7)
 ```
 
 ## 1. What population am I sampling from?
 
-Each observation is a Bernoulli (0/1) outcome, but each one has its own success probability. In a sample of size n, the probabilities are evenly spaced from p = 0.5 to p = 0.9, as the bar chart below shows for n = 20. This models situations like patients from different hospitals, where each hospital has a different recovery rate. The average p is 0.7, so the sample mean is centered at 0.7.
+This population models a basketball player who gets tired during a game. Each shot is a Bernoulli (0/1) outcome: 1 if the shot is made and 0 if it is missed. The shots are independent, but **each shot has its own probability of success**. The first shot has p = 0.90, the last has p = 0.50, and the probabilities in between decrease evenly, as the chart below shows for 20 shots. The average probability is 0.70, so the sample mean (the player's shooting percentage) is centered at 0.7.
 
-This population breaks the CLT’s assumption that observations are identically distributed. I chose fixed, evenly spaced p values on purpose. If I had drawn each p at random, every observation would have the same overall probability of success, and the observations would be identically distributed again.
+This population breaks the CLT's assumption that observations are **identically distributed**. The shots are *independent but non-identically distributed* (i.n.i.d.), and the total number of made shots follows a Poisson-binomial distribution rather than an ordinary binomial. The probabilities are fixed by shot number rather than random. If each p were drawn at random, every shot would have the same overall chance of success, and the shots would be identically distributed again.
 
-To isolate the effect of non-identical observations, I also ran a control: identical Bernoulli observations, all with p = 0.7. The two versions have the same average success rate; the only difference is whether p varies.
+To isolate the effect of non-identical observations, I also ran a **control**: identical shots that all have p = 0.70. Both versions have the same average success rate; the only difference is whether p changes from shot to shot.
 
 ```{r}
 #| label: population
-p_example <- seq(0.5, 0.9, length.out = 20)
+p_example <- seq(0.9, 0.5, length.out = 20)
 barplot(p_example, names.arg = 1:20,
-        main = "Success probability for each observation (n = 20)",
-        xlab = "Observation number", ylab = "p")
+        main = "Probability of making each shot (n = 20)",
+        xlab = "Shot number", ylab = "p")
 abline(h = 0.7, col = "firebrick", lwd = 2, lty = 2)
 ```
 
 ## 2. What did I expect?
 
-The basic version of the CLT assumes identically distributed observations, so I was unsure whether it would still work. However, the Cauchy population failed because of infinite variance, and nothing here is infinite. Every observation is just 0 or 1, and each variance p(1−p) is between 0.09 and 0.25. So I expected the CLT to still work.
+The basic version of the CLT assumes identically distributed observations, so I was unsure whether it would still work. However, the Cauchy population failed because of infinite variance, and nothing here is infinite: every shot is just 0 or 1, and each variance p(1−p) is between 0.09 and 0.25. So I expected the CLT to still work.
 
-Because each observation is only 0 or 1, the most discrete data possible, I expected the Q-Q staircase to be the main obstacle and the answer to be large, probably over 100. I expected the non-identical version and the control to need similar sample sizes.
+Because each observation is only 0 or 1, the most discrete data possible, I expected the Q-Q staircase to be the main obstacle and the answer to be large, probably over 100. I also expected the order of the probabilities (decreasing instead of increasing) not to matter, because the average of independent shots does not depend on the order in which they are taken. I expected the fatigue model and the control to need similar sample sizes.
 
 ## 3. Which sample sizes did I investigate?
 
@@ -55,12 +55,14 @@ set.seed(student_id)
 control <- sweep_n(gen_id, n_values = c(1, 5, 10, 20, 50, 100, 150, 200, 300))
 control
 ```
+
 ```{r}
 #| label: sweep-confirm
 set.seed(student_id)
 confirm <- sweep_n(gen_nonid, n_values = seq(100, 150, by = 10), B = 50000)
 confirm
 ```
+
 ```{r}
 #| label: sweep-confirm-control
 set.seed(student_id)
@@ -68,23 +70,23 @@ confirm_control <- sweep_n(gen_id, n_values = seq(100, 150, by = 10), B = 50000)
 confirm_control
 ```
 
-I ran both versions at n = 1, 5, 10, 20, 50, 100, 150, 200, and 300 with B = 10,000. Both crossed my Q-Q threshold between n = 100 and 150, with almost identical Q-Q correlations at every n. I then tested n = 100 to 150 in steps of 10 with B = 50,000 for both versions. Both failed at n = 110 and passed from n = 120 onward.
+I ran both the fatigue model and the control at n = 1, 5, 10, 20, 50, 100, 150, 200, and 300 with B = 10,000. Both crossed my Q-Q threshold between n = 100 and 150, with nearly identical Q-Q correlations at every sample size. I then tested n = 100 to 150 in steps of 10 with B = 50,000 for both versions. Both failed at n = 110 (Q-Q correlation 0.9979 for fatigue, 0.9980 for control) and passed from n = 120 onward. The 0.9980 at n = 110 is displayed rounded; the unrounded value was slightly below 0.998.
 
 ## 4. When did it become approximately normal?
 
-$$\boxed{n = 5}$$
+$$\boxed{n = 120}$$
 Under my rule, the sampling distribution of the mean becomes approximately normal at n = 120 (the smallest tested value, in steps of 10). The identical control also needed n = 120.
 ## 5. Why did I choose that value?
 
 ```{r}
 #| label: plots-compare
 #| fig-height: 7
-n_a <- 20    # a sample size that fails  (update after the sweep)
-n_b <- 150   # your chosen sample size   (update after the sweep)
+n_a <- 20    # a sample size that fails
+n_b <- 120   # chosen sample size (update if the confirm table changes)
 
 # Theory: mean = average p; SD of the mean = sqrt(average of p(1-p)) / sqrt(n)
 sigma_for <- function(n) {
-  p <- seq(0.5, 0.9, length.out = n)
+  p <- seq(0.9, 0.5, length.out = n)
   sqrt(mean(p * (1 - p)))
 }
 
@@ -102,16 +104,14 @@ par(mfrow = c(1, 1))
 
 My rule requires |skewness| < 0.2, |excess kurtosis| < 0.5, and a Q-Q correlation above 0.998.
 
-Skewness and kurtosis passed early, by about n = 20 for skewness. The Q-Q correlation was the deciding check, because the data are 0s and 1s and the sample mean can only take values in steps of 1/n. At n = 110, the Q-Q correlation was just under 0.998 for both versions. At n = 120, it was just over (0.9980 non-identical, 0.9982 control). Both displayed 0.9980 at n = 110, but the table rounds to four decimals, and the unrounded values were slightly below the threshold.
+Kurtosis passed from n = 5 onward, and skewness passed by about n = 20–50. The Q-Q correlation was the deciding check, because each shot is 0 or 1 and the sample mean can only take values in steps of 1/n. At n = 110, the Q-Q correlation was just under 0.998 for both versions; at n = 120, it was just over (0.9981 fatigue, 0.9982 control).
 
-The plots show the staircase shrinking. At n = 20, the Q-Q plot has large steps of 1/20. At n = 120, the steps are fine and the points follow the line closely. The histogram also matches the normal curve well.
+The plots show the staircase shrinking. At n = 20, the Q-Q plot has large steps of 1/20 and the points drift off the line at both ends. At n = 120, the steps are fine and the points follow the line closely. The histogram also matches the normal curve well.
 
-The main result is that the non-identical version and the identical control behaved almost exactly the same at every sample size. Breaking the “identically distributed” assumption did not slow down convergence in this case.
+The main result is that the fatigue model and the identical control behaved almost exactly the same at every sample size beyond the smallest ones. Breaking the “identically distributed” assumption did not slow down convergence in this case. I also originally ran this experiment with the probabilities increasing from 0.5 to 0.9, and got the same answer (n = 120). This confirms that the order of the probabilities does not matter, only their values.
 
 ## 6. What surprised me?
 
-I was surprised that breaking an assumption made no difference. I expected non-identical observations to cause problems, but the CLT worked just as well and just as fast. I learned that the identical-distribution assumption makes the basic CLT simpler to prove, but it is not strictly required. A more general version of the CLT works when observations differ, as long as no single observation dominates the total. Here, every observation has a similar, small variance, so none dominates.
+I was surprised that breaking an assumption made no difference. I expected changing probabilities to cause problems, but the CLT worked just as well and just as fast as with identical shots. I learned that the identical-distribution assumption makes the basic CLT simpler to prove, but it is not strictly required. A more general version of the CLT works when observations differ, as long as no single observation dominates the total. Here, every shot has a similar, small variance, so none dominates. This was very different from the Cauchy population, where breaking the finite-variance assumption made the CLT fail completely. Not all assumptions are equally important.
 
-This was very different from the Cauchy population, where breaking the finite-variance assumption made the CLT fail completely. So not all assumptions are equally important: infinite variance is fatal, while modest differences between observations are not.
-
-One small difference I noticed was that the non-identical version was slightly less skewed at small sample sizes. Observations with p near 0.5 are nearly symmetric, which partly offsets the skew from observations with p near 0.9. At n = 1, the only p is 0.5, so that single observation is a perfectly symmetric coin flip.
+I was also surprised by the results at very small sample sizes. At n = 1, the fatigue model had skewness −2.661, much worse than the control’s −0.850. With only one shot, the only probability used is the first one, p = 0.9, and a Bernoulli(0.9) is very lopsided because it is almost always 1. When I originally ran the probabilities in the opposite order, the single shot had p = 0.5, a perfectly symmetric coin flip, and its skewness was 0. So at very small n, which probabilities are included matters a lot. As n grows, enough different probabilities are mixed in that only their average matters.
