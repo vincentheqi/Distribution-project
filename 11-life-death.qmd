@@ -1,25 +1,114 @@
 ---
-title: "Untitled"
-format: html
+title: "Population 11: Life/Death Mixture"
+format:
+  html:
+    embed-resources: true
+    toc: true
 ---
 
-## Quarto
-
-Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
-
-## Running Code
-
-When you click the **Render** button a document will be generated that includes both content and the output of embedded code. You can embed code like this:
-
 ```{r}
-1 + 1
+#| label: setup
+source("R/clt_functions.R")
+student_id <- 5405
+
+# Build the instructor's custom age-at-death distribution
+age <- 0:100
+early_component <- 0.045 * exp(-age / 5)                    # infant/child deaths
+adult_component <- 0.030 * exp(-0.5 * ((age - 65) / 10)^2)  # adult deaths, peak at 65
+weight <- early_component + adult_component
+probability <- weight / sum(weight)                         # normalize to sum to 1
+
+# Random generator for this distribution
+rdeath <- function(n) {
+  sample(age, size = n, replace = TRUE, prob = probability)
+}
+
+# Theoretical population characteristics
+mu    <- sum(age * probability)
+sigma <- sqrt(sum((age - mu)^2 * probability))
+pop_skew <- sum((age - mu)^3 * probability) / sigma^3
+pop_kurt <- sum((age - mu)^4 * probability) / sigma^4 - 3
+
+data.frame(
+  mean            = round(mu, 2),
+  sd              = round(sigma, 2),
+  skewness        = round(pop_skew, 3),
+  excess_kurtosis = round(pop_kurt, 3)
+)
 ```
 
-You can add options to executable code like this 
+## 1. What population am I sampling from?
+
+This population is a custom, synthetic distribution of age at death, built to resemble a historical mortality pattern. Ages are whole numbers from 0 to 100. The distribution has two humps, as the plot below shows: a spike of infant and child deaths near age 0 that drops off quickly, and a bell-shaped hump of adult deaths centered at age 65. Very few deaths occur between about ages 15 and 40. It is built by adding an exponential-decay curve and a normal-shaped curve, then normalizing so the probabilities sum to 1.
+
+The population mean is 49.98 years and the standard deviation is 27.63 years. It is left-skewed (skewness −0.862), because the infant-death spike forms a long tail on the left that pulls the mean below where most deaths occur. Its excess kurtosis is −0.79, meaning lighter tails than a normal distribution. The mean (about 50) falls in a valley between the two humps, at an age where relatively few people actually die. This is the irregular, real-world-inspired population in my study.
 
 ```{r}
-#| echo: false
-2 * 2
+#| label: population
+plot(age, 100 * probability, type = "l", lwd = 3, col = "darkorange",
+     xlab = "Age at death", ylab = "Percent of deaths",
+     main = "Population: Custom Age-at-Death Distribution")
+abline(v = mu, col = "firebrick", lty = 2, lwd = 2)
+legend("topright", legend = paste("Mean =", round(mu, 1)),
+       col = "firebrick", lty = 2, lwd = 2, bty = "n")
 ```
 
-The `echo: false` option disables the printing of code (only output is displayed).
+## 2. What did I expect?
+
+For sample means, skewness equals −0.862/√n and excess kurtosis equals −0.79/n. Kurtosis falls inside my ±0.5 limit at n = 2, and skewness reaches −0.2 at about n = 19. The distribution is discrete, but its steps (1 year) are tiny compared with its spread (σ ≈ 27.6), so I didn’t expect the Q-Q staircase to matter. I expected skewness to decide, with an answer around n = 19.
+
+I also thought about the mean falling in a valley. The CLT only requires a finite mean and variance, which this bounded distribution has, so I expected the strange shape to slow convergence down but not prevent it.
+
+## 3. Which sample sizes did I investigate?
+
+```{r}
+#| label: sweep
+set.seed(student_id)
+results <- sweep_n(rdeath, n_values = c(1, 2, 3, 5, 10, 15, 20, 30, 50))
+results
+```
+```{r}
+#| label: sweep-confirm
+set.seed(student_id)
+confirm <- sweep_n(rdeath, n_values = 15:25, B = 50000)
+confirm
+```
+
+I first tested n = 1, 2, 3, 5, 10, 15, 20, 30, and 50 with B = 10,000. Kurtosis passed from n = 2 and the Q-Q correlation from n = 15, but skewness was still −0.201 at n = 20, just over my limit, and passed at n = 30. Because n = 20 was right on the threshold, I tested every value from 15 to 25 with B = 50,000. The verdict flipped once (n = 17 passed but n = 18 failed), then passed at every n from 19 to 25.
+
+## 4. When did it become approximately normal?
+
+$$\boxed{n = 19}$$
+Under my rule, the sampling distribution of the mean becomes approximately normal at n = 19, and every larger sample size I tested also passed.
+
+## 5. Why did I choose that value?
+
+```{r}
+#| label: plots-compare
+#| fig-height: 10
+n_a <- 3    # four humps
+n_b <- 19   # update to your answer after the confirm table
+
+set.seed(student_id)
+means_3 <- simulate_means(rdeath, n = 3)
+means_a <- simulate_means(rdeath, n = n_b - 1)
+means_b <- simulate_means(rdeath, n = n_b)
+
+par(mfrow = c(3, 2))
+plot_means(means_3, mu = mu, sigma = sigma, n = 3)
+plot_means(means_a, mu = mu, sigma = sigma, n = n_b - 1)
+plot_means(means_b, mu = mu, sigma = sigma, n = n_b)
+par(mfrow = c(1, 1))
+```
+
+My rule requires |skewness| < 0.2, |excess kurtosis| < 0.5, and a Q-Q correlation above 0.998.
+
+Kurtosis and the Q-Q correlation passed early, so skewness was the deciding check. With B = 50,000, skewness was −0.211 at n = 18 (fail) and −0.186 at n = 19 (pass), and it stayed inside the limit for every n from 19 to 25. This matches the theory, where skewness reaches −0.2 at n ≈ 18.6. n = 17 also passed (−0.192), but n = 18 failed afterward, so by my stability rule n = 17 does not count.
+
+The plots show how the shape changes. At n = 3, the sampling distribution has four humps, near ages 2, 23, 45, and 65. This happens because each person in a sample is either an early death (near 0) or an adult death (near 65). With 3 people, a sample can include 0, 1, 2, or 3 early deaths, producing sample means near 65, (0 + 65 + 65)/3 ≈ 43, (0 + 0 + 65)/3 ≈ 22, and 0. The Q-Q plot shows these humps as a wavy staircase. By n = 18 and 19, there are so many possible combinations that the humps blend into a single bell shape. The histograms closely match the normal curve, and the Q-Q plots are nearly straight, with only a slight bend at the upper end from the remaining left skew.
+
+## 6. What surprised me?
+
+The four humps at n = 3 surprised me the most. I expected the sampling distribution to be bimodal like the population, but it had four peaks, and I could predict their locations by counting how many early deaths each sample contained. This helped me understand how the CLT actually works: as n grows, there are more and more possible combinations of early and adult deaths, and the humps fill in until they merge into one bell curve.
+
+I was also surprised that the population’s strange shape didn’t slow things down much. Even though the mean falls in a valley where few deaths occur, and the population has two separate humps, it only needed n = 19, fewer than Poisson (35) or the exponential (110). This shows that a distribution doesn’t need to look anything like a bell curve to have well-behaved sample means; what matters most is how skewed it is. Its skewness (−0.862) is much smaller in size than the exponential’s (2).
